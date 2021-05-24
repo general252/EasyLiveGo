@@ -12,6 +12,13 @@ type Pusher struct {
 	Path    string
 }
 
+func (c *Pusher) GetPath() string {
+	if c == nil {
+		return ""
+	}
+	return c.Path
+}
+
 func (c *Pusher) VCodec() string {
 	if c.session != nil {
 		return c.session.VCodec
@@ -38,4 +45,8 @@ func (c *Pusher) VControl() string {
 		return c.session.VControl
 	}
 	return ""
+}
+
+func (c *Pusher) HandleRtp(rtp *RtpPack) {
+	_ = rtp
 }

@@ -5,17 +5,21 @@ import (
 	"net/http"
 )
 
+var (
+	DefaultApp = NewApp()
+)
+
 func NewApp() *App {
 	return &App{}
 }
 
 type App struct {
-	tcpServer     *TcpRtspServer
+	tcpServer     *TcpRtSpServer
 	udpRtpServer  *UdpRtpServer
 	udpRtcpServer *UdpRtcpServer
 }
 
-func (c *App) GetTcpServer() *TcpRtspServer {
+func (c *App) GetTcpServer() *TcpRtSpServer {
 	return c.tcpServer
 }
 
@@ -24,7 +28,7 @@ func (c *App) GetUdpServer() *UdpRtpServer {
 }
 
 func (c *App) Run() {
-	c.tcpServer = NewTcpRtspServer(554)
+	c.tcpServer = NewTcpRtSpServer(554)
 	if err := c.tcpServer.Start(); err != nil {
 		log.Println(err)
 		return

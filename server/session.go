@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -22,7 +23,11 @@ const (
 	SessionTypePuller
 )
 
-func NewSession(conn *net.TCPConn, server *TcpRtspServer) *Session {
+type RtpPack struct {
+	Buffer *bytes.Buffer
+}
+
+func NewSession(conn *net.TCPConn, server *TcpRtSpServer) *Session {
 	const networkBuffer = 200 * 1024
 	connRW := bufio.NewReadWriter(bufio.NewReaderSize(conn, networkBuffer), bufio.NewWriterSize(conn, networkBuffer))
 	return &Session{
@@ -37,7 +42,7 @@ func NewSession(conn *net.TCPConn, server *TcpRtspServer) *Session {
 type Session struct {
 	Id string
 
-	tcpServer *TcpRtspServer
+	tcpServer *TcpRtSpServer
 
 	conn   *net.TCPConn
 	connRW *bufio.ReadWriter
@@ -48,13 +53,19 @@ type Session struct {
 	sdp    string // SDP
 	sdpMap map[string]*rtsp.SDPInfo
 
-	AControl string
-	VControl string
-	ACodec   string
-	VCodec   string
+	AControl string // audio control 示例: streamid=0
+	VControl string // video control 示例: streamid=1
+	ACodec   string // audio codec 示例: aac
+	VCodec   string // video codec 示例: h264
 
-	pusher *Pusher
-	puller *Puller
+	APort        int // client audio port
+	AControlPort int // client audio control port
+	VPort        int // client video port
+	VControlPort int // client video control port
+
+	pusher     *Pusher // 推流流(或拉流对应的发流)
+	puller     *Puller // 拉流
+	pusherHost string  // 推流的主机ip
 }
 
 func (c *Session) Start() {
@@ -176,7 +187,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 		}
 
 		c.pusher = NewPusher(c, c.path)
-		c.tcpServer.AddPusher(c.pusher)
+		c.pusherHost, _ = rtsp.ParseSDPInIp(c.sdp)
 	}
 
 	var setup = func() {
@@ -223,6 +234,9 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 
 		if setupPath == aPath || aPath != "" && strings.LastIndex(setupPath, aPath) == len(setupPath)-len(aPath) {
 			// audio
+			c.APort, _ = strconv.Atoi(udpMatches[1])
+			c.AControlPort, _ = strconv.Atoi(udpMatches[3])
+
 			switch c.Type {
 			case SessionTypePuller:
 				//
@@ -242,6 +256,9 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			}
 		} else if setupPath == vPath || vPath != "" && strings.LastIndex(setupPath, vPath) == len(setupPath)-len(vPath) {
 			// video
+			c.VPort, _ = strconv.Atoi(udpMatches[1])
+			c.VControlPort, _ = strconv.Atoi(udpMatches[3])
+
 			switch c.Type {
 			case SessionTypePuller:
 				//

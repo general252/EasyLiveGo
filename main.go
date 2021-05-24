@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	app := server.NewApp()
+	app := server.DefaultApp
 	app.Run()
 
 	log.Println("app end")

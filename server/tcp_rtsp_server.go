@@ -7,19 +7,19 @@ import (
 	"sync"
 )
 
-func NewTcpRtspServer(port int) *TcpRtspServer {
-	return &TcpRtspServer{port: port}
+func NewTcpRtSpServer(port int) *TcpRtSpServer {
+	return &TcpRtSpServer{port: port}
 }
 
-type TcpRtspServer struct {
+type TcpRtSpServer struct {
 	listen *net.TCPListener
 	wg     sync.WaitGroup
 	port   int
 
-	pushers sync.Map // path -> Pusher
+	sessionList sync.Map // sessionId -> Session
 }
 
-func (c *TcpRtspServer) Start() error {
+func (c *TcpRtSpServer) Start() error {
 	var err error
 	c.listen, err = net.ListenTCP("tcp", &net.TCPAddr{
 		IP:   net.IPv4zero,
@@ -36,13 +36,13 @@ func (c *TcpRtspServer) Start() error {
 	return nil
 }
 
-func (c *TcpRtspServer) Stop() {
+func (c *TcpRtSpServer) Stop() {
 	_ = c.listen.Close()
 
 	c.wg.Wait()
 }
 
-func (c *TcpRtspServer) loop() {
+func (c *TcpRtSpServer) loop() {
 	defer c.wg.Done()
 
 	log.Printf("listen %v", c.listen.Addr())
@@ -59,23 +59,61 @@ func (c *TcpRtspServer) loop() {
 		_ = tcpConn.SetWriteBuffer(64 * 1024)
 
 		session := NewSession(tcpConn, c)
+		c.sessionList.Store(session.Id, session)
+
 		session.Start()
 	}
 }
 
-func (c *TcpRtspServer) AddPusher(pusher *Pusher) {
-	c.pushers.Store(pusher.Path, pusher)
-}
+func (c *TcpRtSpServer) GetPusher(path string) (*Pusher, error) {
+	var res *Pusher
 
-func (c *TcpRtspServer) GetPusher(path string) (*Pusher, error) {
-	obj, ok := c.pushers.Load(path)
-	if !ok {
+	c.sessionList.Range(func(key, value interface{}) bool {
+		session, ok := value.(*Session)
+		if !ok || session == nil {
+			return true
+		}
+
+		if session.Type == SessionTypePusher {
+			if session.pusher.Path == path {
+				res = session.pusher
+				return false
+			}
+		}
+
+		return true
+	})
+
+	if res == nil {
 		return nil, fmt.Errorf("not found")
 	}
 
-	res, ok := obj.(*Pusher)
-	if !ok || res == nil {
-		return nil, fmt.Errorf("error")
+	return res, nil
+}
+
+func (c *TcpRtSpServer) GetPusherByAddr(host string, port int) (*Pusher, error) {
+	var res *Pusher
+
+	c.sessionList.Range(func(key, value interface{}) bool {
+		session, ok := value.(*Session)
+		if !ok || session == nil {
+			return true
+		}
+
+		if session.Type == SessionTypePusher {
+			if session.pusherHost == host {
+				if session.VPort == port || session.APort == port || session.VControlPort == port || session.AControlPort == port {
+					res = session.pusher
+					return false
+				}
+			}
+		}
+
+		return true
+	})
+
+	if res == nil {
+		return nil, fmt.Errorf("not found")
 	}
 
 	return res, nil

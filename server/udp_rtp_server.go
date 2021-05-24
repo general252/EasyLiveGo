@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"log"
 	"net"
 	"sync"
@@ -45,8 +46,9 @@ func (c *UdpRtpServer) Stop() {
 func (c *UdpRtpServer) loop() {
 	defer c.wg.Done()
 
+	var connList = make(map[string]*Pusher)
+
 	buffer := make([]byte, 65535)
-	var connList = make(map[string]string)
 	for {
 		n, addr, err := c.listen.ReadFromUDP(buffer)
 		if err != nil {
@@ -58,9 +60,16 @@ func (c *UdpRtpServer) loop() {
 		_ = addr
 		_ = msg
 
-		if _, ok := connList[addr.String()]; !ok {
-			connList[addr.String()] = addr.String()
-			log.Printf("new rtp conn %v", addr)
+		pusher, ok := connList[addr.String()]
+		if !ok {
+			pusher, _ := DefaultApp.GetTcpServer().GetPusherByAddr(addr.IP.String(), addr.Port)
+			connList[addr.String()] = pusher
+			log.Printf("new rtp conn %v, %v", addr, pusher.GetPath())
+		} else {
+			var pkt = &RtpPack{
+				Buffer: bytes.NewBuffer(msg),
+			}
+			pusher.HandleRtp(pkt)
 		}
 	}
 }

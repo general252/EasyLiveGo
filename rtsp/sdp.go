@@ -3,6 +3,7 @@ package rtsp
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -102,4 +103,32 @@ func ParseSDP(sdpRaw string) map[string]*SDPInfo {
 		}
 	}
 	return sdpMap
+}
+
+// ParseSDPInIp 解析ip
+func ParseSDPInIp(sdpRaw string) (string, error) {
+	for _, line := range strings.Split(sdpRaw, "\n") {
+		line = strings.TrimSpace(line)
+		typeval := strings.SplitN(line, "=", 2)
+		if len(typeval) == 2 {
+			fields := strings.SplitN(typeval[1], " ", 2)
+			switch typeval[0] {
+			case "c":
+				if len(fields) > 0 {
+					switch fields[0] {
+					case "IN":
+						if len(fields) == 2 {
+							hostField := strings.SplitN(fields[1], " ", 2)
+							if len(hostField) == 2 {
+								return hostField[1], nil
+							}
+						}
+					}
+				}
+
+			}
+		}
+	}
+
+	return "", fmt.Errorf("not found")
 }

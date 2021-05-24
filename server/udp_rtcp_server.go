@@ -45,8 +45,9 @@ func (c *UdpRtcpServer) Stop() {
 func (c *UdpRtcpServer) loop() {
 	defer c.wg.Done()
 
+	var connList = make(map[string]*Pusher)
+
 	buffer := make([]byte, 65535)
-	var connList = make(map[string]string)
 	for {
 		n, addr, err := c.listen.ReadFromUDP(buffer)
 		if err != nil {
@@ -58,9 +59,13 @@ func (c *UdpRtcpServer) loop() {
 		_ = addr
 		_ = msg
 
-		if _, ok := connList[addr.String()]; !ok {
-			connList[addr.String()] = addr.String()
-			log.Printf("new rtcp conn %v", addr)
+		pusher, ok := connList[addr.String()]
+		if !ok {
+			pusher, _ := DefaultApp.GetTcpServer().GetPusherByAddr(addr.IP.String(), addr.Port)
+			connList[addr.String()] = pusher
+			log.Printf("new rtcp conn %v, %v", addr, pusher.GetPath())
+		} else {
+			_ = pusher
 		}
 		// log.Printf("rtcp %v %v", addr, string(msg))
 	}
