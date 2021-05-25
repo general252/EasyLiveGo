@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"log"
 	"net"
 	"sync"
@@ -28,8 +27,8 @@ func (c *UdpRtpServer) Start() error {
 		return err
 	}
 
-	_ = c.listen.SetWriteBuffer(64 * 1024)
-	_ = c.listen.SetReadBuffer(64 * 1024)
+	_ = c.listen.SetWriteBuffer(512 * 1024)
+	_ = c.listen.SetReadBuffer(512 * 1024)
 
 	c.wg.Add(1)
 	go c.loop()
@@ -66,9 +65,14 @@ func (c *UdpRtpServer) loop() {
 			connList[addr.String()] = pusher
 			log.Printf("new rtp conn %v, %v", addr, pusher.GetPath())
 		} else {
-			var pkt = &RtpPack{
-				Buffer: bytes.NewBuffer(msg),
+			var pktType = PacketTypeUnknown
+			if pusher.session.APort == addr.Port {
+				pktType = PacketTypeAudio
+			} else if pusher.session.VPort == addr.Port {
+				pktType = PacketTypeVideo
 			}
+
+			var pkt = NewRtpPack(pktType, msg)
 			pusher.HandleRtp(pkt)
 		}
 	}

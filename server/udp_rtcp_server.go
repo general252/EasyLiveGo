@@ -27,8 +27,8 @@ func (c *UdpRtcpServer) Start() error {
 		return err
 	}
 
-	_ = c.listen.SetWriteBuffer(64 * 1024)
-	_ = c.listen.SetReadBuffer(64 * 1024)
+	_ = c.listen.SetWriteBuffer(512 * 1024)
+	_ = c.listen.SetReadBuffer(512 * 1024)
 
 	c.wg.Add(1)
 	go c.loop()
@@ -65,7 +65,15 @@ func (c *UdpRtcpServer) loop() {
 			connList[addr.String()] = pusher
 			log.Printf("new rtcp conn %v, %v", addr, pusher.GetPath())
 		} else {
-			_ = pusher
+			var pktType = PacketTypeUnknown
+			if pusher.session.AControlPort == addr.Port {
+				pktType = PacketTypeAudio
+			} else if pusher.session.VControlPort == addr.Port {
+				pktType = PacketTypeVideo
+			}
+
+			var pkt = NewRtcpPack(pktType, msg)
+			pusher.HandleRtcp(pkt)
 		}
 		// log.Printf("rtcp %v %v", addr, string(msg))
 	}

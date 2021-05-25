@@ -3,11 +3,13 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"github.com/general252/go-rtsp/rtsp"
-	"github.com/general252/gout/uencode"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/url"
 	"regexp"
@@ -15,23 +17,11 @@ import (
 	"strings"
 )
 
-type SessionType int
-
-const (
-	SessionTypeUnknown SessionType = iota
-	SessionTypePusher
-	SessionTypePuller
-)
-
-type RtpPack struct {
-	Buffer *bytes.Buffer
-}
-
 func NewSession(conn *net.TCPConn, server *TcpRtSpServer) *Session {
 	const networkBuffer = 200 * 1024
 	connRW := bufio.NewReadWriter(bufio.NewReaderSize(conn, networkBuffer), bufio.NewWriterSize(conn, networkBuffer))
 	return &Session{
-		Id:        uencode.MD5Bit16([]byte(uencode.UUID())),
+		Id:        generalSessionId(),
 		tcpServer: server,
 		conn:      conn,
 		connRW:    connRW,
@@ -48,8 +38,8 @@ type Session struct {
 	connRW *bufio.ReadWriter
 
 	Type   SessionType
-	url    string
-	path   string
+	Url    string
+	Path   string
 	sdp    string // SDP
 	sdpMap map[string]*rtsp.SDPInfo
 
@@ -63,9 +53,9 @@ type Session struct {
 	VPort        int // client video port
 	VControlPort int // client video control port
 
-	pusher     *Pusher // 推流流(或拉流对应的发流)
-	puller     *Puller // 拉流
-	pusherHost string  // 推流的主机ip
+	pusher *Pusher // 推流流(或拉流对应的发流)
+	puller *Puller // 拉流
+	Host   string  // 推流的主机ip
 }
 
 func (c *Session) Start() {
@@ -73,11 +63,12 @@ func (c *Session) Start() {
 }
 
 func (c *Session) Stop() {
-
+	c.conn.Close()
+	c.tcpServer.sessionList.Delete(c.Id)
 }
 
 func (c *Session) loop() {
-	defer c.conn.Close()
+	defer c.Stop()
 
 	reqBuf := bytes.NewBuffer(nil)
 	for {
@@ -159,7 +150,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 
 	var announce = func() {
 		c.Type = SessionTypePusher
-		c.url = req.URL
+		c.Url = req.URL
 
 		reqURL, err := url.Parse(req.URL)
 		if err != nil {
@@ -167,7 +158,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			res.Status = "Invalid URL"
 			return
 		}
-		c.path = reqURL.Path
+		c.Path = reqURL.Path
 
 		c.sdp = req.Body
 		c.sdpMap = rtsp.ParseSDP(c.sdp)
@@ -186,8 +177,8 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			log.Printf("video codec[%s]\n", c.VCodec)
 		}
 
-		c.pusher = NewPusher(c, c.path)
-		c.pusherHost, _ = rtsp.ParseSDPInIp(c.sdp)
+		c.pusher = NewPusher(c, c.Path)
+		c.Host, _ = rtsp.ParseSDPInIp(c.sdp)
 	}
 
 	var setup = func() {
@@ -240,6 +231,9 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			switch c.Type {
 			case SessionTypePuller:
 				//
+				if c.puller != nil {
+					c.puller.SetupAudio()
+				}
 			case SessionTypePusher:
 				//
 				tss := strings.Split(ts, ";")
@@ -262,6 +256,9 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			switch c.Type {
 			case SessionTypePuller:
 				//
+				if c.puller != nil {
+					c.puller.SetupVideo()
+				}
 			case SessionTypePusher:
 				//
 				tss := strings.Split(ts, ";")
@@ -283,7 +280,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 	var describe = func() {
 		c.Type = SessionTypePuller
 
-		c.url = req.URL
+		c.Url = req.URL
 
 		reqURL, err := url.Parse(req.URL)
 		if err != nil {
@@ -291,9 +288,9 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			res.Status = "Invalid URL"
 			return
 		}
-		c.path = reqURL.Path
+		c.Path = reqURL.Path
 
-		pusher, err := c.tcpServer.GetPusher(c.path)
+		pusher, err := c.tcpServer.GetPusher(c.Path)
 		if err != nil {
 			res.StatusCode = 404
 			res.Status = "NOT FOUND"
@@ -340,4 +337,17 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 		}
 		c.puller.Pause(true)
 	}
+}
+
+// generalSessionId create session id
+func generalSessionId() string {
+	dest := make([]byte, 16)
+	n, err := rand.Read(dest)
+	if err != nil {
+		return fmt.Sprintf("%v", rand.Uint64())
+	}
+
+	h := md5.New()
+	h.Write(dest[:n])
+	return hex.EncodeToString(h.Sum(nil))[8:24]
 }
