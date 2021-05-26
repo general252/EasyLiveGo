@@ -6,7 +6,7 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"github.com/general252/go-rtsp/rtsp"
+	"github.com/general252/EasyLiveGo/rtsp"
 	"io"
 	"log"
 	"math/rand"

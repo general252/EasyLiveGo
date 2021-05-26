@@ -1,6 +1,8 @@
 package server
 
-import "sync"
+import (
+	"sync"
+)
 
 func NewPusher(session *Session, path string) *Pusher {
 	r := &Pusher{

@@ -1,3 +1,3 @@
-module github.com/general252/go-rtsp
+module github.com/general252/EasyLiveGo
 
 go 1.16
