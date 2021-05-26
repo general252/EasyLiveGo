@@ -62,16 +62,18 @@ func (c *Session) Start() {
 }
 
 func (c *Session) Stop() {
-	if c.pusher != nil {
-		c.pusher.Range(func(puller *Puller) bool {
-			puller.session.Stop()
-			return true
-		})
-		c.pusher.Stop()
-	}
-
-	if c.puller != nil {
-		c.puller.Stop()
+	if c.Type == SessionTypePusher {
+		if c.pusher != nil {
+			c.pusher.Range(func(puller *Puller) bool {
+				puller.session.Stop()
+				return true
+			})
+			c.pusher.Stop()
+		}
+	} else if c.Type == SessionTypePuller {
+		if c.puller != nil {
+			c.puller.Stop()
+		}
 	}
 
 	_ = c.conn.Close()
