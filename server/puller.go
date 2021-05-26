@@ -7,18 +7,20 @@ import (
 )
 
 func NewPuller(session *Session, pusher *Pusher) *Puller {
-	r := &Puller{
-		pusher:  pusher,
+	c := &Puller{
+		Id:      generalShortId(32),
 		session: session,
+		pusher:  pusher,
 	}
 
-	pusher.AddRtpHandle(r.handleRtp)
-	pusher.AddRtcpHandle(r.handleRtcp)
+	c.pusher.AddPuller(c)
 
-	return r
+	return c
 }
 
 type Puller struct {
+	Id string
+
 	session *Session
 	pusher  *Pusher
 
@@ -26,6 +28,12 @@ type Puller struct {
 	addrAudioCtrl *net.UDPAddr
 	addrVideo     *net.UDPAddr
 	addrVideoCtrl *net.UDPAddr
+}
+
+func (c *Puller) Stop() {
+	if c.pusher != nil {
+		c.pusher.RemovePuller(c)
+	}
 }
 
 func (c *Puller) Pause(pause bool) {

@@ -53,8 +53,6 @@ func (c *TcpRtSpServer) loop() {
 			return
 		}
 
-		log.Printf("new connection: %v", tcpConn.RemoteAddr())
-
 		_ = tcpConn.SetReadBuffer(512 * 1024)
 		_ = tcpConn.SetWriteBuffer(512 * 1024)
 
@@ -86,14 +84,14 @@ func (c *TcpRtSpServer) GetPusher(path string) (*Pusher, error) {
 	return res, nil
 }
 
-func (c *TcpRtSpServer) GetPusherByAddr(host string, port int) (*Pusher, error) {
-	var res *Pusher
+func (c *TcpRtSpServer) GetSessionByAddr(host string, port int) (*Session, error) {
+	var res *Session
 
 	c.SessionRange(func(session *Session) bool {
 		if session.Type == SessionTypePusher {
 			if session.Host() == host {
 				if session.VPort == port || session.APort == port || session.VControlPort == port || session.AControlPort == port {
-					res = session.pusher
+					res = session
 					return false
 				}
 			}

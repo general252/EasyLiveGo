@@ -6,8 +6,9 @@ import (
 
 func NewPusher(session *Session, path string) *Pusher {
 	r := &Pusher{
-		Path:    path,
-		session: session,
+		session:    session,
+		Path:       path,
+		pullerList: make(map[string]*Puller),
 	}
 
 	return r
@@ -20,25 +21,68 @@ type Pusher struct {
 	session *Session
 	Path    string
 
-	rtpHandles    []RtpHandle
-	rtpHandlesMux sync.Mutex
-
-	rtcpHandles    []RtcpHandle
-	rtcpHandlesMux sync.Mutex
+	pullerList map[string]*Puller
+	pullerMux  sync.Mutex
 }
 
-func (c *Pusher) AddRtpHandle(rtpHandle RtpHandle) {
-	c.rtpHandlesMux.Lock()
-	defer c.rtpHandlesMux.Unlock()
+func (c *Pusher) Stop() {
+	var pullers []*Puller
+	c.lock(func() {
+		for _, puller := range c.pullerList {
+			pullers = append(pullers, puller)
+		}
+	})
 
-	c.rtpHandles = append(c.rtpHandles, rtpHandle)
+	c.pullerList = make(map[string]*Puller)
+
+	for _, puller := range pullers {
+		puller.Stop()
+	}
 }
 
-func (c *Pusher) AddRtcpHandle(rtcpHandle RtcpHandle) {
-	c.rtcpHandlesMux.Lock()
-	defer c.rtcpHandlesMux.Unlock()
+func (c *Pusher) lock(f func()) {
+	c.pullerMux.Lock()
+	defer c.pullerMux.Unlock()
 
-	c.rtcpHandles = append(c.rtcpHandles, rtcpHandle)
+	f()
+}
+
+func (c *Pusher) Range(f func(*Puller) bool) {
+	c.lock(func() {
+		for _, puller := range c.pullerList {
+			if f(puller) == false {
+				return
+			}
+		}
+	})
+}
+
+func (c *Pusher) AddPuller(pull *Puller) {
+	c.lock(func() {
+		c.pullerList[pull.Id] = pull
+	})
+}
+
+func (c *Pusher) RemovePuller(pull *Puller) {
+	c.lock(func() {
+		delete(c.pullerList, pull.Id)
+	})
+}
+
+func (c *Pusher) HandleRtp(rtp *RtpPack) {
+	c.lock(func() {
+		for _, puller := range c.pullerList {
+			puller.handleRtp(rtp)
+		}
+	})
+}
+
+func (c *Pusher) HandleRtcp(rtcp *RtcpPack) {
+	c.lock(func() {
+		for _, puller := range c.pullerList {
+			puller.handleRtcp(rtcp)
+		}
+	})
 }
 
 func (c *Pusher) GetPath() string {
@@ -74,22 +118,4 @@ func (c *Pusher) VControl() string {
 		return c.session.VControl
 	}
 	return ""
-}
-
-func (c *Pusher) HandleRtp(rtp *RtpPack) {
-	c.rtpHandlesMux.Lock()
-	c.rtpHandlesMux.Unlock()
-
-	for _, handle := range c.rtpHandles {
-		handle(rtp)
-	}
-}
-
-func (c *Pusher) HandleRtcp(rtcp *RtcpPack) {
-	c.rtcpHandlesMux.Lock()
-	c.rtcpHandlesMux.Unlock()
-
-	for _, handle := range c.rtcpHandles {
-		handle(rtcp)
-	}
 }

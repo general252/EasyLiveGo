@@ -45,7 +45,7 @@ func (c *UdpRtpServer) Stop() {
 func (c *UdpRtpServer) loop() {
 	defer c.wg.Done()
 
-	var connList = make(map[string]*Pusher)
+	var connList = make(map[string]*Session)
 
 	buffer := make([]byte, 65535)
 	for {
@@ -54,26 +54,15 @@ func (c *UdpRtpServer) loop() {
 			log.Println(err)
 			return
 		}
-		msg := buffer[:n]
+		data := buffer[:n]
 
-		_ = addr
-		_ = msg
-
-		pusher, ok := connList[addr.String()]
+		session, ok := connList[addr.String()]
 		if !ok {
-			pusher, _ := DefaultApp.GetTcpServer().GetPusherByAddr(addr.IP.String(), addr.Port)
-			connList[addr.String()] = pusher
-			log.Printf("new rtp conn %v, %v", addr, pusher.GetPath())
+			session, _ := DefaultApp.GetTcpServer().GetSessionByAddr(addr.IP.String(), addr.Port)
+			connList[addr.String()] = session
+			log.Printf("new rtp conn %v, %v", addr, session.Path)
 		} else {
-			var pktType = PacketTypeUnknown
-			if pusher.session.APort == addr.Port {
-				pktType = PacketTypeAudio
-			} else if pusher.session.VPort == addr.Port {
-				pktType = PacketTypeVideo
-			}
-
-			var pkt = NewRtpPack(pktType, msg, c.skt)
-			pusher.HandleRtp(pkt)
+			session.OnRtp(c.skt, addr, data)
 		}
 	}
 }

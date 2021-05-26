@@ -21,7 +21,7 @@ func NewSession(conn *net.TCPConn, server *TcpRtSpServer) *Session {
 	const networkBuffer = 200 * 1024
 	connRW := bufio.NewReadWriter(bufio.NewReaderSize(conn, networkBuffer), bufio.NewWriterSize(conn, networkBuffer))
 	return &Session{
-		Id:        generalSessionId(),
+		Id:        generalShortId(16),
 		tcpServer: server,
 		conn:      conn,
 		connRW:    connRW,
@@ -62,7 +62,19 @@ func (c *Session) Start() {
 }
 
 func (c *Session) Stop() {
-	c.conn.Close()
+	if c.pusher != nil {
+		c.pusher.Range(func(puller *Puller) bool {
+			puller.session.Stop()
+			return true
+		})
+		c.pusher.Stop()
+	}
+
+	if c.puller != nil {
+		c.puller.Stop()
+	}
+
+	_ = c.conn.Close()
 	c.tcpServer.sessionList.Delete(c.Id)
 }
 
@@ -76,7 +88,12 @@ func (c *Session) Host() string {
 }
 
 func (c *Session) loop() {
-	defer c.Stop()
+	defer func() {
+		log.Printf("session close: %v", c.Id)
+		c.Stop()
+	}()
+
+	log.Printf("new session: %v %v", c.Id, c.conn.RemoteAddr())
 
 	reqBuf := bytes.NewBuffer(nil)
 	for {
@@ -346,9 +363,33 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 	}
 }
 
-// generalSessionId create session id
-func generalSessionId() string {
-	dest := make([]byte, 16)
+func (c *Session) OnRtp(conn *net.UDPConn, from *net.UDPAddr, data []byte) {
+	var pktType = PacketTypeUnknown
+	if c.APort == from.Port {
+		pktType = PacketTypeAudio
+	} else if c.VPort == from.Port {
+		pktType = PacketTypeVideo
+	}
+
+	var pkt = NewRtpPack(pktType, data, conn)
+	c.pusher.HandleRtp(pkt)
+}
+
+func (c *Session) OnRtcp(conn *net.UDPConn, from *net.UDPAddr, data []byte) {
+	var pktType = PacketTypeUnknown
+	if c.AControlPort == from.Port {
+		pktType = PacketTypeAudio
+	} else if c.VControlPort == from.Port {
+		pktType = PacketTypeVideo
+	}
+
+	var pkt = NewRtcpPack(pktType, data, conn)
+	c.pusher.HandleRtcp(pkt)
+}
+
+// generalShortId create id
+func generalShortId(len int) string {
+	dest := make([]byte, len)
 	n, err := rand.Read(dest)
 	if err != nil {
 		return fmt.Sprintf("%v", rand.Uint64())
