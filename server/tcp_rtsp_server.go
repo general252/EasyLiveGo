@@ -45,7 +45,7 @@ func (c *TcpRtSpServer) Stop() {
 func (c *TcpRtSpServer) loop() {
 	defer c.wg.Done()
 
-	log.Printf("listen %v", c.listen.Addr())
+	log.Printf("skt %v", c.listen.Addr())
 	for {
 		tcpConn, err := c.listen.AcceptTCP()
 		if err != nil {
@@ -91,7 +91,7 @@ func (c *TcpRtSpServer) GetPusherByAddr(host string, port int) (*Pusher, error) 
 
 	c.SessionRange(func(session *Session) bool {
 		if session.Type == SessionTypePusher {
-			if session.Host == host {
+			if session.Host() == host {
 				if session.VPort == port || session.APort == port || session.VControlPort == port || session.AControlPort == port {
 					res = session.pusher
 					return false

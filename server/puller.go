@@ -22,40 +22,57 @@ type Puller struct {
 	session *Session
 	pusher  *Pusher
 
-	socketAudio *net.UDPConn
-	socketVideo *net.UDPConn
+	addrAudio     *net.UDPAddr
+	addrAudioCtrl *net.UDPAddr
+	addrVideo     *net.UDPAddr
+	addrVideoCtrl *net.UDPAddr
 }
 
 func (c *Puller) Pause(pause bool) {
 
 }
 
-func (c *Puller) SetupAudio() {
-	port := c.session.APort
+func (c *Puller) SetupAudio(host string, audioPort int, audioCtrlPort int) {
+	var port int
+	var err error
 
-	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", c.session.Host, port))
+	if len(host) == 0 {
+		log.Println("host is nil")
+		return
+	}
+
+	port = audioPort
+	c.addrAudio, err = net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", host, port))
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	c.socketAudio, err = net.DialUDP("udp4", nil, addr)
+	port = audioCtrlPort
+	c.addrAudioCtrl, err = net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", host, port))
 	if err != nil {
 		log.Println(err)
 		return
 	}
 }
 
-func (c *Puller) SetupVideo() {
-	port := c.session.VPort
+func (c *Puller) SetupVideo(host string, videoPort, videoCtrlPort int) {
+	var port int
+	var err error
+	if len(host) == 0 {
+		log.Println("host is nil")
+		return
+	}
 
-	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", c.session.Host, port))
+	port = videoPort
+	c.addrVideo, err = net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", host, port))
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	c.socketVideo, err = net.DialUDP("udp4", nil, addr)
+	port = videoCtrlPort
+	c.addrVideoCtrl, err = net.ResolveUDPAddr("udp4", fmt.Sprintf("%v:%v", host, port))
 	if err != nil {
 		log.Println(err)
 		return
@@ -63,21 +80,45 @@ func (c *Puller) SetupVideo() {
 }
 
 func (c *Puller) handleRtp(rtp *RtpPack) {
+	var addr *net.UDPAddr
 	if rtp.Type == PacketTypeVideo {
-		_, _ = c.socketVideo.Write(rtp.Buffer.Bytes())
+		addr = c.addrVideo
 	} else if rtp.Type == PacketTypeAudio {
-		_, _ = c.socketAudio.Write(rtp.Buffer.Bytes())
+		addr = c.addrAudio
 	} else {
 		log.Println("unknown packet type")
 	}
+
+	if addr != nil {
+		n, err := rtp.Conn.WriteToUDP(rtp.Buffer.Bytes(), addr)
+		if err != nil {
+			log.Println(err)
+		} else {
+			_ = n
+		}
+	} else {
+		log.Println("rtp addr is nil")
+	}
 }
 
-func (c *Puller) handleRtcp(rtp *RtcpPack) {
-	if rtp.Type == PacketTypeVideo {
-		_, _ = c.socketVideo.Write(rtp.Buffer.Bytes())
-	} else if rtp.Type == PacketTypeAudio {
-		_, _ = c.socketAudio.Write(rtp.Buffer.Bytes())
+func (c *Puller) handleRtcp(rtcp *RtcpPack) {
+	var addr *net.UDPAddr
+	if rtcp.Type == PacketTypeVideo {
+		addr = c.addrVideoCtrl
+	} else if rtcp.Type == PacketTypeAudio {
+		addr = c.addrAudioCtrl
 	} else {
 		log.Println("unknown packet type")
+	}
+
+	if addr != nil {
+		n, err := rtcp.Conn.WriteToUDP(rtcp.Buffer.Bytes(), addr)
+		if err != nil {
+			log.Println(err)
+		} else {
+			_ = n
+		}
+	} else {
+		log.Println("rtcp addr is nil")
 	}
 }

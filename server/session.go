@@ -55,7 +55,6 @@ type Session struct {
 
 	pusher *Pusher // 推流流(或拉流对应的发流)
 	puller *Puller // 拉流
-	Host   string  // 推流的主机ip
 }
 
 func (c *Session) Start() {
@@ -65,6 +64,15 @@ func (c *Session) Start() {
 func (c *Session) Stop() {
 	c.conn.Close()
 	c.tcpServer.sessionList.Delete(c.Id)
+}
+
+func (c *Session) Host() string {
+	addr, ok := c.conn.RemoteAddr().(*net.TCPAddr)
+	if ok && addr != nil {
+		return addr.IP.String()
+	}
+
+	return ""
 }
 
 func (c *Session) loop() {
@@ -178,7 +186,6 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 		}
 
 		c.pusher = NewPusher(c, c.Path)
-		c.Host, _ = rtsp.ParseSDPInIp(c.sdp)
 	}
 
 	var setup = func() {
@@ -232,7 +239,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			case SessionTypePuller:
 				//
 				if c.puller != nil {
-					c.puller.SetupAudio()
+					c.puller.SetupAudio(c.Host(), c.APort, c.AControlPort)
 				}
 			case SessionTypePusher:
 				//
@@ -257,7 +264,7 @@ func (c *Session) handleRequest(req *rtsp.Request) {
 			case SessionTypePuller:
 				//
 				if c.puller != nil {
-					c.puller.SetupVideo()
+					c.puller.SetupVideo(c.Host(), c.VPort, c.VControlPort)
 				}
 			case SessionTypePusher:
 				//

@@ -1,6 +1,9 @@
 package server
 
-import "bytes"
+import (
+	"bytes"
+	"net"
+)
 
 type SessionType int
 
@@ -19,26 +22,29 @@ const (
 )
 
 type RtpPack struct {
+	Conn   *net.UDPConn
 	Type   PacketType
 	Buffer *bytes.Buffer
 }
 
-func NewRtpPack(pktType PacketType, data []byte) *RtpPack {
+func NewRtpPack(pktType PacketType, data []byte, srcConn *net.UDPConn) *RtpPack {
 	return &RtpPack{
+		Conn:   srcConn,
 		Type:   pktType,
 		Buffer: bytes.NewBuffer(data),
 	}
 }
 
 type RtcpPack struct {
+	Conn   *net.UDPConn
 	Type   PacketType
 	Buffer *bytes.Buffer
 }
 
-func NewRtcpPack(pktType PacketType, data []byte) *RtcpPack {
+func NewRtcpPack(pktType PacketType, data []byte, srcConn *net.UDPConn) *RtcpPack {
 	return &RtcpPack{
+		Conn:   srcConn,
 		Type:   pktType,
 		Buffer: bytes.NewBuffer(data),
 	}
 }
-

@@ -11,14 +11,14 @@ func NewUdpRtcpServer(port int) *UdpRtcpServer {
 }
 
 type UdpRtcpServer struct {
-	listen *net.UDPConn
-	wg     sync.WaitGroup
-	port   int
+	skt  *net.UDPConn
+	wg   sync.WaitGroup
+	port int
 }
 
 func (c *UdpRtcpServer) Start() error {
 	var err error
-	c.listen, err = net.ListenUDP("udp", &net.UDPAddr{
+	c.skt, err = net.ListenUDP("udp", &net.UDPAddr{
 		IP:   net.IPv4zero,
 		Port: c.port,
 		Zone: "",
@@ -27,8 +27,8 @@ func (c *UdpRtcpServer) Start() error {
 		return err
 	}
 
-	_ = c.listen.SetWriteBuffer(512 * 1024)
-	_ = c.listen.SetReadBuffer(512 * 1024)
+	_ = c.skt.SetWriteBuffer(512 * 1024)
+	_ = c.skt.SetReadBuffer(512 * 1024)
 
 	c.wg.Add(1)
 	go c.loop()
@@ -37,7 +37,7 @@ func (c *UdpRtcpServer) Start() error {
 }
 
 func (c *UdpRtcpServer) Stop() {
-	_ = c.listen.Close()
+	_ = c.skt.Close()
 
 	c.wg.Wait()
 }
@@ -49,7 +49,7 @@ func (c *UdpRtcpServer) loop() {
 
 	buffer := make([]byte, 65535)
 	for {
-		n, addr, err := c.listen.ReadFromUDP(buffer)
+		n, addr, err := c.skt.ReadFromUDP(buffer)
 		if err != nil {
 			log.Println(err)
 			return
@@ -72,7 +72,7 @@ func (c *UdpRtcpServer) loop() {
 				pktType = PacketTypeVideo
 			}
 
-			var pkt = NewRtcpPack(pktType, msg)
+			var pkt = NewRtcpPack(pktType, msg, c.skt)
 			pusher.HandleRtcp(pkt)
 		}
 		// log.Printf("rtcp %v %v", addr, string(msg))
